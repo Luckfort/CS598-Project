@@ -1,0 +1,9 @@
+numpy>=1.24
+torch>=2.1
+transformers>=4.51
+sentence-transformers>=3.0
+huggingface_hub>=0.20
+pandas>=2.0 
+pyarrow>=14.0
+bitsandbytes>=0.43
+accelerate>=0.30

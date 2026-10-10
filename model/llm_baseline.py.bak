@@ -1,0 +1,151 @@
+"""
+llm.py — generation side of the pipeline.
+
+The baseline prompt in this file is deliberately naive. It is part of what YOU
+are meant to replace. Leaving headroom here is the point: a well-tuned prompt,
+a rerank step, a self-check pass, or any other improvement you come up with 
+should be integrated here to improve model performance.
+
+The model is asked for JSON with an explicit citation list, indicating what chunks it looked at:
+
+    {"answer": "...", "cited": [2, 5]}
+
+Citations are what make failure modes measurable. Without them you only see
+that the answer was wrong, not where the wrong answer came from.
+"""
+import json
+import re
+from typing import Any, Dict, List, Sequence
+
+SYSTEM_PROMPT = (
+    "You answer questions using provided evidence as reference. "
+    "Reply with a single JSON object and nothing else."
+)
+
+USER_TEMPLATE = """Documents:
+{documents}
+
+Question: {question}
+
+Reply with JSON only, in this exact form:
+{{"answer": "<short answer string, or null>", "cited": [<document numbers you used>]}}
+
+If the documents do not contain enough information to answer, reply with
+{{"answer": null, "cited": []}}."""
+
+NO_CONTEXT_TEMPLATE = """Question: {question}
+
+Reply with JSON only, in this exact form:
+{{"answer": "<short answer string, or null>", "cited": []}}"""
+
+
+def format_documents(chunks: Sequence[dict]) -> str:
+    if not chunks:
+        return "(none)"
+    out = []
+    for i, c in enumerate(chunks, start=1):
+        title = c.get("title") or ""
+        head = f"[{i}] {title}".rstrip()
+        out.append(f"{head}\n{c['text']}")
+    return "\n\n".join(out)
+
+
+def build_messages(question: str, chunks: Sequence[dict]) -> List[Dict[str, str]]:
+    if chunks:
+        user = USER_TEMPLATE.format(documents=format_documents(chunks), question=question)
+    else:
+        user = NO_CONTEXT_TEMPLATE.format(question=question)
+    return [{"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user}]
+
+
+_JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
+def parse_output(raw: str, n_chunks: int) -> Dict[str, Any]:
+    """Best-effort JSON extraction. Returns answer (str|None), cited (list[int]),
+    and parse_ok so malformed-output rate is itself a tracked metric."""
+    text = raw.strip()
+    text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.MULTILINE).strip()
+    m = _JSON_RE.search(text)
+    if m:
+        try:
+            obj = json.loads(m.group(0))
+            ans = obj.get("answer")
+            if isinstance(ans, (int, float)):
+                ans = str(ans)
+            if isinstance(ans, str):
+                ans = ans.strip() or None
+                if ans and ans.lower() in {"null", "none", "unknown", "n/a"}:
+                    ans = None
+            elif ans is not None:
+                ans = str(ans)
+            cited_raw = obj.get("cited") or []
+            cited = []
+            for c in cited_raw if isinstance(cited_raw, list) else []:
+                try:
+                    ci = int(c)
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= ci <= n_chunks:
+                    cited.append(ci)
+            return {"answer": ans, "cited": sorted(set(cited)), "parse_ok": True}
+        except json.JSONDecodeError:
+            pass
+    # fallback: treat the whole thing as the answer, no citations
+    return {"answer": text or None, "cited": [], "parse_ok": False}
+
+
+class HFChatModel:
+    """
+    Defalut runner for the LLM model. You should only try to load in 4 bit
+    if you're having trouble fitting the model on your computer.
+    """
+
+    def __init__(self, model_name: str = "Qwen/Qwen3-4B-Instruct-2507",
+                 device: str = "auto", max_new_tokens: int = 128,
+                 dtype: str = "auto", load_4bit: bool = False,
+                 max_input_tokens: int = 8192, **_):
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import __version__ as tf_version
+
+        self.name = model_name
+        self.max_new_tokens = max_new_tokens
+        self.max_input_tokens = max_input_tokens
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        kwargs: Dict[str, Any] = {"device_map": device}
+        if load_4bit:
+            from transformers import BitsAndBytesConfig
+            kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+            )
+        else:
+            key = ("dtype" if tuple(int(x) for x in tf_version.split(".")[:2]) >= (4, 56)
+                   else "torch_dtype")
+            kwargs[key] = getattr(torch, dtype) if dtype != "auto" else "auto"
+
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+        self.model.eval()
+        self.torch = torch
+
+    def generate(self, batch: Sequence[List[Dict[str, str]]]) -> List[str]:
+        texts = [self.tokenizer.apply_chat_template(
+            m, tokenize=False, add_generation_prompt=True) for m in batch]
+        enc = self.tokenizer(texts, return_tensors="pt", padding=True,
+                             padding_side="left", truncation=True,
+                             max_length=self.max_input_tokens).to(self.model.device)
+        with self.torch.inference_mode():
+            out = self.model.generate(**enc,
+                                      max_new_tokens=self.max_new_tokens,
+                                      do_sample=False,
+                                      pad_token_id=self.tokenizer.pad_token_id
+                                      or self.tokenizer.eos_token_id)
+        gen = out[:, enc["input_ids"].shape[1]:]
+        return self.tokenizer.batch_decode(gen, skip_special_tokens=True)
+
+
+def get_model(model_name: str, **kwargs):
+    return HFChatModel(model_name, **kwargs)

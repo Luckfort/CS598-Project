@@ -1,0 +1,31 @@
+{
+  "conditions": {
+    "gold_plus_noise": {
+      "n": 100,
+      "f1": 0.3444,
+      "em": 0.26,
+      "abstention_rate": 0.42,
+      "json_parse_rate": 1.0,
+      "run_config": [
+        "Qwen/Qwen3-4B-Instruct-2507 k=5"
+      ]
+    },
+    "no_gold": {
+      "n": 100,
+      "f1": 0.83,
+      "em": null,
+      "abstention_rate": 0.83,
+      "json_parse_rate": 1.0,
+      "run_config": [
+        "Qwen/Qwen3-4B-Instruct-2507 k=5"
+      ]
+    }
+  },
+  "headline": {
+    "use_f1": 0.3444,
+    "ignore_f1": 0.83,
+    "combined_f1": 0.4868,
+    "n_use": 100,
+    "n_ignore": 100
+  }
+}

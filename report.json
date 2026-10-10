@@ -1,0 +1,82 @@
+{
+  "conditions": {
+    "gold_plus_noise": {
+      "n": 750,
+      "f1": 0.3716,
+      "em": 0.3133,
+      "abstention_rate": 0.4547,
+      "json_parse_rate": 1.0,
+      "run_config": [
+        "Qwen/Qwen3-4B-Instruct-2507 k=5"
+      ]
+    },
+    "no_gold": {
+      "n": 1000,
+      "f1": 0.849,
+      "em": null,
+      "abstention_rate": 0.849,
+      "json_parse_rate": 1.0,
+      "run_config": [
+        "Qwen/Qwen3-4B-Instruct-2507 k=5"
+      ]
+    }
+  },
+  "headline": {
+    "use_f1": 0.3716,
+    "ignore_f1": 0.849,
+    "combined_f1": 0.5169,
+    "n_use": 750,
+    "n_ignore": 1000
+  },
+  "by_task": {
+    "2wiki/bridge_comparison": {
+      "use_f1": 0.4876,
+      "ignore_f1": 0.856,
+      "combined_f1": 0.6213,
+      "n_use": 125,
+      "n_ignore": 125
+    },
+    "2wiki/comparison": {
+      "use_f1": 0.7899,
+      "ignore_f1": 0.752,
+      "combined_f1": 0.7705,
+      "n_use": 125,
+      "n_ignore": 125
+    },
+    "2wiki/compositional": {
+      "use_f1": 0.2979,
+      "ignore_f1": 0.944,
+      "combined_f1": 0.4529,
+      "n_use": 125,
+      "n_ignore": 125
+    },
+    "2wiki/inference": {
+      "use_f1": 0.2314,
+      "ignore_f1": 0.712,
+      "combined_f1": 0.3493,
+      "n_use": 125,
+      "n_ignore": 125
+    },
+    "musique/2hop": {
+      "use_f1": 0.2835,
+      "ignore_f1": 0.8155,
+      "combined_f1": 0.4207,
+      "n_use": 84,
+      "n_ignore": 168
+    },
+    "musique/3hop": {
+      "use_f1": 0.1987,
+      "ignore_f1": 0.8795,
+      "combined_f1": 0.3242,
+      "n_use": 83,
+      "n_ignore": 166
+    },
+    "musique/4hop": {
+      "use_f1": 0.1515,
+      "ignore_f1": 0.9518,
+      "combined_f1": 0.2614,
+      "n_use": 83,
+      "n_ignore": 166
+    }
+  }
+}
